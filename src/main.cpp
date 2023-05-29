@@ -2,6 +2,7 @@
 #include <MFRC522.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h> // Include the ArduinoJSON library
 
 #define LED 25
 #define SS_PIN 5
@@ -13,9 +14,9 @@ MFRC522 rfid(SS_PIN, RST_PIN); // Create an MFRC522 instance
 
 void setup()
 {
-  pinMode(BUILTIN_LED, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
   pinMode(LED, OUTPUT);
-  Serial.begin(921600); // Initialize serial communication
+  Serial.begin(115200); // Initialize serial communication
   SPI.begin();          // Initialize SPI bus
   rfid.PCD_Init();      // Initialize MFRC522
 
@@ -53,15 +54,23 @@ void loop()
     // Stop encryption on PCD
     rfid.PCD_StopCrypto1();
 
-    // Make a GET request
+    // Make a PUT request with JSON body
     if (WiFi.status() == WL_CONNECTED)
     {
       HTTPClient http;
-      String url = "http://192.168.1.10:5050/fetch";
-      // url += "?uid=" + uid;
-
+      String url = "http://192.168.1.10:5050/api/balance/deduct/" + uid;
+      
       http.begin(url);
-      int httpResponseCode = http.GET();
+      http.addHeader("Content-Type", "application/json"); // Set the content type header for JSON
+
+      // Create a JSON object
+      DynamicJsonDocument jsonBody(128);
+      jsonBody["amount"] = 3; // Set the amount property in the JSON object
+
+      String requestBody;
+      serializeJson(jsonBody, requestBody); // Serialize the JSON object to a string
+
+      int httpResponseCode = http.PUT(requestBody);
 
       if (httpResponseCode == HTTP_CODE_OK)
       {
