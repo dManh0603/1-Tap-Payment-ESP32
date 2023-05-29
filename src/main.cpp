@@ -1,15 +1,14 @@
 #include <SPI.h>
 #include <MFRC522.h>
-#include <WiFiMulti.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 
-#define BUILTIN_LED 2
 #define LED 25
 #define SS_PIN 5
 #define RST_PIN 22
 #define WIFI_SSID "121 dai la 2.4Ghz"
 #define WIFI_PASSWORD "12345689"
 
-WiFiMulti wifiMulti;
 MFRC522 rfid(SS_PIN, RST_PIN); // Create an MFRC522 instance
 
 void setup()
@@ -20,21 +19,22 @@ void setup()
   SPI.begin();          // Initialize SPI bus
   rfid.PCD_Init();      // Initialize MFRC522
 
-  wifiMulti.addAP(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  while (wifiMulti.run() != WL_CONNECTED)
+  while (WiFi.status() != WL_CONNECTED)
   {
     delay(100);
   }
 
-  Serial.println("Wifi connected");
+  Serial.println("WiFi connected");
   Serial.println("Scan an RFID card");
 }
 
 void loop()
 {
-  digitalWrite(LED_BUILTIN, wifiMulti.run() == WL_CONNECTED ? HIGH : LOW);
+  digitalWrite(LED_BUILTIN, WiFi.status() == WL_CONNECTED ? HIGH : LOW);
   digitalWrite(LED, HIGH);
+
   // Check if a card is present
   if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial())
   {
@@ -52,5 +52,29 @@ void loop()
     rfid.PICC_HaltA();
     // Stop encryption on PCD
     rfid.PCD_StopCrypto1();
+
+    // Make a GET request
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      HTTPClient http;
+      String url = "http://192.168.1.10:5050/fetch";
+      // url += "?uid=" + uid;
+
+      http.begin(url);
+      int httpResponseCode = http.GET();
+
+      if (httpResponseCode == HTTP_CODE_OK)
+      {
+        String response = http.getString();
+        Serial.println("Server response: " + response);
+      }
+      else
+      {
+        Serial.print("Error - HTTP response code: ");
+        Serial.println(httpResponseCode);
+      }
+
+      http.end();
+    }
   }
 }
