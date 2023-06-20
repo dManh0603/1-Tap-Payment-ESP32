@@ -2,40 +2,41 @@
 #include <MFRC522.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <ArduinoJson.h> // Include the ArduinoJSON library
+#include <ArduinoJson.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-#define LED 25
-#define SS_PIN 5
-#define RST_PIN 32
-#define WIFI_SSID "121 dai la 2.4Ghz"
-#define WIFI_PASSWORD "12345689"
-#define SERVER_URL "http://192.168.1.10:5050/api/balance/deduct/"
-#define BUTTON_PIN 33
+#include "config.h"
+
+int lastButtonState = HIGH; // the previous state from the input pin
+int currentButtonState;     // the current reading from the input pin
 
 MFRC522 rfid(SS_PIN, RST_PIN);      // Create an MFRC522 instance
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Initialize the LCD with the I2C address (0x27) and dimensions (16 columns, 2 rows)
 
-void displayMessage(String message)
+String type = "motorbike";
+
+void displayMessage(String message, bool itSelf = false)
 {
+
   lcd.clear();         // Clear the LCD screen
   lcd.setCursor(0, 0); // Set the cursor to the first column, first row
-  if (message != "Success")
-  {
-    lcd.print("Failed");
-    lcd.setCursor(0, 1);
-  }
-  lcd.print(message); // Print the message on the LCD
-  delay(2000);
+  lcd.print(message);  // Print the message on the LCD
+  if (itSelf)
+    return;
+  delay(1000);
   lcd.clear();
-  lcd.print("Ready");
+  lcd.print("Ready for");
+  lcd.setCursor(0, 1); // Set the cursor to the first column, first row
+  lcd.print(type);
 }
 
 void setup()
 {
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(LED, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
 
   Serial.begin(115200); // Initialize serial communication
 
@@ -48,18 +49,35 @@ void setup()
 
   while (WiFi.status() != WL_CONNECTED)
   {
-    delay(100);
+    displayMessage("Configuring ...", true);
+    delay(500);
   }
-
-  Serial.println("WiFi connected");
-  Serial.println("Scan an RFID card");
-  displayMessage("hello world !!");
+  displayMessage("Success");
 }
 
 void loop()
 {
   digitalWrite(LED_BUILTIN, WiFi.status() == WL_CONNECTED ? HIGH : LOW);
-  digitalWrite(LED, HIGH);
+  digitalWrite(LED_PIN, HIGH);
+  // read the state of the switch/button:
+  currentButtonState = digitalRead(BUTTON_PIN);
+
+  if (lastButtonState == LOW && currentButtonState == HIGH)
+  {
+    if (type == "motorbike")
+    {
+      type = "bicycle";
+    }
+    else
+    {
+      type = "motorbike";
+    }
+    displayMessage("Switched type");
+    Serial.println(type);
+  }
+
+  // save the last state
+  lastButtonState = currentButtonState;
 
   // Check if a card is present
   if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial())
@@ -90,7 +108,7 @@ void loop()
 
       // Create a JSON object
       DynamicJsonDocument jsonBody(128);
-      jsonBody["amount"] = 3; // Set the amount property in the JSON object
+      jsonBody["type"] = type; // Set the type property in the JSON object
 
       String requestBody;
       serializeJson(jsonBody, requestBody); // Serialize the JSON object to a string
@@ -109,11 +127,17 @@ void loop()
         Serial.println("Server response: " + response);
         displayMessage("Unrecognized");
       }
-      else if (httpResponseCode == 400)
+      else if (httpResponseCode == 402)
       {
         String response = http.getString();
         Serial.println("Server response: " + response);
         displayMessage("Declined");
+      }
+      else if (httpResponseCode == 403)
+      {
+        String response = http.getString();
+        Serial.println("Server response: " + response);
+        displayMessage("Disabled card");
       }
       else
       {
