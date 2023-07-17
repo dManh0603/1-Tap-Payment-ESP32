@@ -10,7 +10,8 @@
 
 int lastButtonState = HIGH; // the previous state from the input pin
 int currentButtonState;     // the current reading from the input pin
-
+bool isFirstNetwork = true;
+String Endpoint = "";
 MFRC522 rfid(SS_PIN, RST_PIN);      // Create an MFRC522 instance
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Initialize the LCD with the I2C address (0x27) and dimensions (16 columns, 2 rows)
 
@@ -31,6 +32,45 @@ void displayMessage(String message, bool itSelf = false)
   lcd.print(type);
 }
 
+bool connectToWiFi()
+{
+  const char *ssid;
+  const char *password;
+
+  if (isFirstNetwork)
+  {
+    ssid = WIFI_SSID;
+    password = WIFI_PASSWORD;
+    Endpoint = SERVER_URL;
+  }
+  else
+  {
+    ssid = WIFI_SSID_2;
+    password = WIFI_PASSWORD_2;
+    Endpoint = SERVER_URL_2;
+  }
+
+  WiFi.begin(ssid, password);
+  int attempts = 0;
+
+  while (WiFi.status() != WL_CONNECTED && attempts < 3)
+  {
+    displayMessage("Connecting", true);
+    delay(2000);
+    attempts++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    return true; // Successfully connected to WiFi
+  }
+  else
+  {
+    isFirstNetwork = !isFirstNetwork; // Switch to the other network
+    return false;                     // WiFi connection failed for this network
+  }
+}
+
 void setup()
 {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -47,10 +87,11 @@ void setup()
   lcd.backlight(); // Turn on the backlight
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  while (WiFi.status() != WL_CONNECTED)
+  while (!connectToWiFi())
   {
-    displayMessage("Configuring ...", true);
-    delay(500);
+    // WiFi connection failed for both networks, retrying in 5 seconds
+    displayMessage("WiFi Failed", true);
+    delay(5000);
   }
   displayMessage("Success");
 }
@@ -101,7 +142,7 @@ void loop()
     if (WiFi.status() == WL_CONNECTED)
     {
       HTTPClient http;
-      String url = SERVER_URL + uid;
+      String url = Endpoint + uid;
 
       http.begin(url);
       http.addHeader("Content-Type", "application/json"); // Set the content type header for JSON
