@@ -142,7 +142,7 @@ void loop()
     if (WiFi.status() == WL_CONNECTED)
     {
       HTTPClient http;
-      String url = Endpoint + uid;
+      String url = Endpoint + "/api/balance/deduct/" + uid;
 
       http.begin(url);
       http.addHeader("Content-Type", "application/json"); // Set the content type header for JSON

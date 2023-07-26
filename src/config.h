@@ -12,5 +12,5 @@
 #define WIFI_PASSWORD_2 "12345689"
 
 // Server Configuration
-#define SERVER_URL "http://172.17.18.26:5050/api/balance/deduct/"
-#define SERVER_URL_2 "http://192.168.1.10:5050/api/balance/deduct/"
+#define SERVER_URL "http://172.17.18.26:5050"
+#define SERVER_URL_2 "http://192.168.1.10:5050"
