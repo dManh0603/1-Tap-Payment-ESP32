@@ -5,30 +5,45 @@
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <ESP32Servo.h>
 
 #include "config.h"
 
-int lastButtonState = HIGH; // the previous state from the input pin
-int currentButtonState;     // the current reading from the input pin
+Servo myServo;
+
+int lastButtonState = HIGH;
+int currentButtonState;   
 bool isFirstNetwork = true;
 String Endpoint = "";
-MFRC522 rfid(SS_PIN, RST_PIN);      // Create an MFRC522 instance
-LiquidCrystal_I2C lcd(0x27, 16, 2); // Initialize the LCD with the I2C address (0x27) and dimensions (16 columns, 2 rows)
+MFRC522 rfid(SS_PIN, RST_PIN);     
+LiquidCrystal_I2C lcd(0x27, 16, 2); 
 
 String type = "motorbike";
 
-void displayMessage(String message, bool itSelf = false)
+void moveServo()
+{
+  myServo.write(0);
+  delay(200);
+  myServo.write(90);
+  delay(2000);
+  myServo.write(180);
+  delay(220);
+  myServo.write(90);
+
+}
+
+void displayMessage(String message, bool stay = false)
 {
 
-  lcd.clear();         // Clear the LCD screen
-  lcd.setCursor(0, 0); // Set the cursor to the first column, first row
-  lcd.print(message);  // Print the message on the LCD
-  if (itSelf)
+  lcd.clear(); 
+  lcd.setCursor(0, 0);
+  lcd.print(message); 
+  if (stay)
     return;
   delay(1000);
   lcd.clear();
   lcd.print("Ready for");
-  lcd.setCursor(0, 1); // Set the cursor to the first column, first row
+  lcd.setCursor(0, 1); 
   lcd.print(type);
 }
 
@@ -62,36 +77,36 @@ bool connectToWiFi()
 
   if (WiFi.status() == WL_CONNECTED)
   {
-    return true; // Successfully connected to WiFi
+    return true; 
   }
   else
   {
-    isFirstNetwork = !isFirstNetwork; // Switch to the other network
-    return false;                     // WiFi connection failed for this network
+    isFirstNetwork = !isFirstNetwork; 
+    return false;                    
   }
 }
 
 void setup()
 {
+  Serial.begin(115200); 
+
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(LED_PIN, OUTPUT);
 
-  Serial.begin(115200); // Initialize serial communication
+  myServo.setPeriodHertz(50);
+  myServo.attach(SERVO_PIN, 500, 2400);
+  myServo.write(90);
 
-  SPI.begin();     // Initialize SPI bus
-  rfid.PCD_Init(); // Initialize MFRC522
+  SPI.begin();   
+  rfid.PCD_Init(); 
 
-  lcd.init();      // Initialize the LCD
-  lcd.backlight(); // Turn on the backlight
+  lcd.init();     
+  lcd.backlight(); 
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
   while (!connectToWiFi())
   {
-    // WiFi connection failed for both networks, retrying in 5 seconds
     displayMessage("WiFi Failed", true);
-    delay(5000);
   }
   displayMessage("Success");
 }
@@ -99,8 +114,6 @@ void setup()
 void loop()
 {
   digitalWrite(LED_BUILTIN, WiFi.status() == WL_CONNECTED ? HIGH : LOW);
-  digitalWrite(LED_PIN, HIGH);
-  // read the state of the switch/button:
   currentButtonState = digitalRead(BUTTON_PIN);
 
   if (lastButtonState == LOW && currentButtonState == HIGH)
@@ -117,13 +130,11 @@ void loop()
     Serial.println(type);
   }
 
-  // save the last state
   lastButtonState = currentButtonState;
 
-  // Check if a card is present
   if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial())
   {
-    // Read the card's UID
+    displayMessage("Processing", true);
     String uid = "";
     for (byte i = 0; i < rfid.uid.size; i++)
     {
@@ -132,27 +143,23 @@ void loop()
 
     Serial.print("Card UID: ");
     Serial.println(uid);
+    moveServo();
 
-    // Halt PICC
     rfid.PICC_HaltA();
-    // Stop encryption on PCD
     rfid.PCD_StopCrypto1();
-
-    // Make a PUT request with JSON body
     if (WiFi.status() == WL_CONNECTED)
     {
       HTTPClient http;
       String url = Endpoint + "/api/balance/deduct/" + uid;
 
       http.begin(url);
-      http.addHeader("Content-Type", "application/json"); // Set the content type header for JSON
+      http.addHeader("Content-Type", "application/json"); 
 
-      // Create a JSON object
       DynamicJsonDocument jsonBody(128);
-      jsonBody["type"] = type; // Set the type property in the JSON object
+      jsonBody["type"] = type;
 
       String requestBody;
-      serializeJson(jsonBody, requestBody); // Serialize the JSON object to a string
+      serializeJson(jsonBody, requestBody);
 
       int httpResponseCode = http.PUT(requestBody);
 
